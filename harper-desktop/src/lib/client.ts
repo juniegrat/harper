@@ -96,6 +96,13 @@ export class Client {
 		return await invoke<boolean>('get_auto_update');
 	}
 
+	static async getKeepRunningOnClose(): Promise<boolean> {
+		return await invoke<boolean>('get_keep_running_on_close');
+	}
+
+	static async setKeepRunningOnClose(keepRunningOnClose: boolean): Promise<void> {
+		await invoke('set_keep_running_on_close', { keepRunningOnClose });
+	}
 	static async setAutoUpdate(autoUpdate: boolean): Promise<void> {
 		await invoke('set_auto_update', { autoUpdate });
 	}

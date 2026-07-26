@@ -371,6 +371,7 @@ pub fn run_highlighter(has_parent: bool) {
             last_update_check: None,
             highlighter_service_enabled: true,
             french: *dictionary_french.borrow(),
+            keep_running_on_close: true,
         };
         *dictionary_linter.borrow_mut() = config.create_linter();
 
@@ -455,6 +456,7 @@ fn fetch_highlighter_config(
             last_update_check: None,
             highlighter_service_enabled: true,
             french,
+            keep_running_on_close: true,
         })
     })
 }

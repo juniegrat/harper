@@ -26,6 +26,8 @@ pub fn application_message_handler<R: Runtime>() -> impl Fn(Invoke<R>) -> bool {
         set_debounce_ms,
         get_auto_update,
         set_auto_update,
+        get_keep_running_on_close,
+        set_keep_running_on_close,
         get_last_update_check,
         set_last_update_check,
         set_dialect,
@@ -102,6 +104,26 @@ async fn set_debounce_ms(
 #[tauri::command]
 async fn get_auto_update(config: State<'_, Arc<Mutex<Config>>>) -> Result<bool, String> {
     Ok(config.lock().await.auto_update)
+}
+
+#[tauri::command]
+async fn get_keep_running_on_close(config: State<'_, Arc<Mutex<Config>>>) -> Result<bool, String> {
+    Ok(config.lock().await.keep_running_on_close)
+}
+
+#[tauri::command]
+async fn set_keep_running_on_close(
+    keep_running_on_close: bool,
+    config: State<'_, Arc<Mutex<Config>>>,
+) -> Result<(), String> {
+    let mut config = config.lock().await;
+    config.keep_running_on_close = keep_running_on_close;
+    config
+        .save_to_system()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
 }
 
 #[tauri::command]

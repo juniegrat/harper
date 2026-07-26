@@ -27,6 +27,10 @@ let frenchError = '';
 let isLaunchAtStartupLoading = true;
 let isLaunchAtStartupSaving = false;
 let launchAtStartupError = '';
+let keepRunningOnClose = true;
+let isKeepRunningLoading = true;
+let isKeepRunningSaving = false;
+let keepRunningError = '';
 let isAutoUpdateLoading = true;
 let isAutoUpdateSaving = false;
 let isCheckingForUpdates = false;
@@ -44,6 +48,7 @@ onMount(() => {
 	void loadDialect();
 	void loadFrench();
 	void loadLaunchAtStartup();
+	void loadKeepRunningOnClose();
 	void loadAutoUpdate();
 	void loadUpdateVersions();
 	void loadDebounceMs();
@@ -59,6 +64,10 @@ onMount(() => {
 
 		if (!isLaunchAtStartupSaving) {
 			void loadLaunchAtStartup();
+		}
+
+		if (!isKeepRunningSaving) {
+			void loadKeepRunningOnClose();
 		}
 
 		if (!isAutoUpdateSaving) {
@@ -185,6 +194,36 @@ async function setLaunchAtStartup(enabled: boolean) {
 		launchAtStartupError = `Unable to save startup setting: ${error}`;
 	} finally {
 		isLaunchAtStartupSaving = false;
+	}
+}
+
+async function loadKeepRunningOnClose() {
+	isKeepRunningLoading = true;
+	keepRunningError = '';
+
+	try {
+		keepRunningOnClose = await Client.getKeepRunningOnClose();
+	} catch (error) {
+		keepRunningError = `Unable to load background setting: ${error}`;
+	} finally {
+		isKeepRunningLoading = false;
+	}
+}
+
+async function setKeepRunningOnClose(enabled: boolean) {
+	const previousKeepRunning = keepRunningOnClose;
+
+	keepRunningOnClose = enabled;
+	isKeepRunningSaving = true;
+	keepRunningError = '';
+
+	try {
+		await Client.setKeepRunningOnClose(enabled);
+	} catch (error) {
+		keepRunningOnClose = previousKeepRunning;
+		keepRunningError = `Unable to save background setting: ${error}`;
+	} finally {
+		isKeepRunningSaving = false;
 	}
 }
 
@@ -371,6 +410,31 @@ function settingsValueToDialect(value: string): Dialect {
               <p class="result-summary">{launchAtStartupError}</p>
             {:else if isLaunchAtStartupSaving}
               <p class="result-summary">Saving startup setting...</p>
+            {/if}
+
+            <div class="row">
+              <div>
+                <strong>Keep running when windows are closed</strong>
+                <p>Closing a window only hides it; Harper keeps checking your text in the background. Reopen it from the dock icon or the menu bar.</p>
+              </div>
+              <button
+                class:checked={keepRunningOnClose}
+                class="checkbox"
+                type="button"
+                role="checkbox"
+                disabled={isKeepRunningLoading || isKeepRunningSaving}
+                aria-checked={keepRunningOnClose}
+                on:click={() => setKeepRunningOnClose(!keepRunningOnClose)}
+              >
+                {#if keepRunningOnClose}<span class="settings-icon icon-check" aria-hidden="true"></span>{/if}
+              </button>
+            </div>
+            {#if isKeepRunningLoading}
+              <p class="result-summary">Loading background setting...</p>
+            {:else if keepRunningError}
+              <p class="result-summary">{keepRunningError}</p>
+            {:else if isKeepRunningSaving}
+              <p class="result-summary">Saving background setting...</p>
             {/if}
 
             <div class="row top">

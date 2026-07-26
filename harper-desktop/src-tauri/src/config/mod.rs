@@ -28,6 +28,9 @@ pub struct Config {
     pub highlighter_service_enabled: bool,
     /// Lint text as French (experimental) instead of English.
     pub french: bool,
+    /// Hide windows instead of quitting when they are closed, keeping the app
+    /// (and the highlighter service) alive in the background.
+    pub keep_running_on_close: bool,
 }
 
 impl Config {
@@ -43,6 +46,7 @@ impl Config {
             last_update_check: None,
             highlighter_service_enabled: true,
             french: false,
+            keep_running_on_close: true,
         }
     }
 
@@ -179,6 +183,7 @@ impl Config {
             "last_update_check": self.last_update_check,
             "highlighter_service_enabled": self.highlighter_service_enabled,
             "french": self.french,
+            "keep_running_on_close": self.keep_running_on_close,
         }))
     }
 
@@ -209,6 +214,8 @@ impl Config {
             )?
             .unwrap_or(true),
             french: deserialize_optional_field(object, "french")?.unwrap_or(false),
+            keep_running_on_close: deserialize_optional_field(object, "keep_running_on_close")?
+                .unwrap_or(true),
         })
     }
 }
