@@ -176,6 +176,10 @@ export class Client {
 		return await invoke<AppSearchResult[]>('search_apps', { query });
 	}
 
+	static async appFromPath(path: string): Promise<AppSearchResult> {
+		return await invoke<AppSearchResult>('app_from_path', { path });
+	}
+
 	static async launchApp(bundleId: string): Promise<void> {
 		await invoke('launch_app', { bundleId });
 	}

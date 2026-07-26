@@ -45,6 +45,7 @@ pub fn application_message_handler<R: Runtime>() -> impl Fn(Invoke<R>) -> bool {
         stop_highlighter_service,
         launch_app,
         search_apps,
+        app_from_path,
     ]
 }
 
@@ -392,4 +393,15 @@ fn search_apps(
         .lock()
         .map_err(|error| format!("Failed to read platform broker: {error}"))?
         .search_apps(&query)
+}
+
+#[tauri::command]
+fn app_from_path(
+    path: String,
+    broker: State<'_, StdMutex<PlatformBroker>>,
+) -> Result<AppSearchResult, String> {
+    broker
+        .lock()
+        .map_err(|error| format!("Failed to read platform broker: {error}"))?
+        .app_from_path(&path)
 }

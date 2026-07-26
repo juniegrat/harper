@@ -1,5 +1,6 @@
 <script lang="ts">
 import { onMount } from 'svelte';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { type AppSearchResult, Client } from '$lib/client';
 import AppIcon from './AppIcon.svelte';
 
@@ -11,6 +12,7 @@ export let add: (bundleId: string) => void;
 
 let searchResults: AppSearchResult[] = [];
 let isSearching = false;
+let isDraggingApp = false;
 let debounceTimeout: number | null = null;
 let searchRequestId = 0;
 
@@ -19,12 +21,53 @@ $: isDuplicate = existingBundleIds.includes(trimmedBundleId);
 $: canAdd = Boolean(trimmedBundleId) && !isDuplicate && !isSaving;
 
 onMount(() => {
+	let mounted = true;
+	let unlistenDragDrop: (() => void) | undefined;
+
 	const initialSearch = window.setTimeout(() => {
 		void performSearch(bundleId);
 	}, 0);
 
-	return () => window.clearTimeout(initialSearch);
+	getCurrentWebviewWindow()
+		.onDragDropEvent((event) => {
+			if (!mounted) return;
+
+			if (event.payload.type === 'enter' || event.payload.type === 'over') {
+				isDraggingApp = event.payload.paths.some((p) => p.endsWith('.app'));
+			} else if (event.payload.type === 'leave') {
+				isDraggingApp = false;
+			} else if (event.payload.type === 'drop') {
+				isDraggingApp = false;
+				const appPath = event.payload.paths.find((p) => p.endsWith('.app'));
+				if (appPath) {
+					void addFromPath(appPath);
+				}
+			}
+		})
+		.then((unlisten) => {
+			if (mounted) {
+				unlistenDragDrop = unlisten;
+			} else {
+				unlisten();
+			}
+		});
+
+	return () => {
+		mounted = false;
+		unlistenDragDrop?.();
+		window.clearTimeout(initialSearch);
+	};
 });
+
+async function addFromPath(path: string) {
+	try {
+		const result = await Client.appFromPath(path);
+		bundleId = result.bundle_id;
+		searchResults = [result];
+	} catch (error) {
+		console.error('Could not read dropped app:', error);
+	}
+}
 
 async function performSearch(query: string) {
 	const requestId = ++searchRequestId;
@@ -117,6 +160,9 @@ function submit() {
         }}
       />
     </div>
+    <div class="modal-drop-hint" class:dragging={isDraggingApp}>
+      {isDraggingApp ? "Drop the .app to add it" : "Tip: drag an .app from Finder onto this window, or paste a bundle ID"}
+    </div>
     <div class="modal-list">
       {#if isSearching}
         <div class="empty">Searching...</div>
@@ -156,3 +202,19 @@ function submit() {
     </div>
   </div>
 </div>
+
+<style>
+  .modal-drop-hint {
+    padding: 6px 12px;
+    font-size: 12px;
+    color: var(--text-secondary, #888);
+    text-align: center;
+    border-top: 1px dashed transparent;
+    transition: color 120ms ease;
+  }
+
+  .modal-drop-hint.dragging {
+    color: var(--accent-color, #4f8cff);
+    font-weight: 600;
+  }
+</style>

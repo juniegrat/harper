@@ -65,6 +65,10 @@ pub trait OsBroker {
     fn search_apps(&self, _query: &str) -> Result<Vec<AppSearchResult>, String> {
         Err("App search is only supported on macOS.".to_string())
     }
+
+    fn app_from_path(&self, _path: &str) -> Result<AppSearchResult, String> {
+        Err("App lookup by path is only supported on macOS.".to_string())
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

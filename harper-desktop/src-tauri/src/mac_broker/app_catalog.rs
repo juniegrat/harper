@@ -101,6 +101,43 @@ fn bundle_id_from_app_path(path: &str) -> Option<String> {
     }
 }
 
+/// Builds an [`AppSearchResult`] directly from an `.app` path on disk, reading
+/// its `Info.plist` with `plutil` — no Spotlight involved. This is the
+/// fallback for apps Spotlight does not index (or has not indexed yet).
+pub fn app_search_result_from_app_path(path: &str) -> Result<AppSearchResult, String> {
+    let path = path.trim();
+
+    if !path.ends_with(".app") || !Path::new(path).is_dir() {
+        return Err(format!("Not an application bundle: {path}"));
+    }
+
+    let plist_path = format!("{path}/Contents/Info.plist");
+    let bundle_id = plist_string_value(&plist_path, "CFBundleIdentifier")
+        .ok_or_else(|| format!("Could not read CFBundleIdentifier from {path}"))?;
+
+    let name = plist_string_value(&plist_path, "CFBundleDisplayName")
+        .or_else(|| plist_string_value(&plist_path, "CFBundleName"))
+        .or_else(|| display_name_from_app_path(path))
+        .unwrap_or_else(|| bundle_id.clone());
+
+    Ok(AppSearchResult { name, bundle_id })
+}
+
+fn plist_string_value(plist_path: &str, key: &str) -> Option<String> {
+    let output = Command::new("plutil")
+        .args(["-extract", key, "raw", "-o", "-", plist_path])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    if value.is_empty() { None } else { Some(value) }
+}
+
 fn escape_spotlight_string(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }

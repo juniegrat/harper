@@ -440,7 +440,21 @@ impl OsBroker for MacBroker {
             lock.populate()?;
         }
 
-        Ok(lock.search(query))
+        let results = lock.search(query);
+
+        // Spotlight does not always index every installed app; when the query
+        // looks like a bundle ID, resolve it directly so it can still be added.
+        if results.is_empty() && query.trim().contains('.') {
+            return Ok(vec![app_catalog::app_search_result_from_bundle_id(
+                query.trim(),
+            )]);
+        }
+
+        Ok(results)
+    }
+
+    fn app_from_path(&self, path: &str) -> Result<AppSearchResult, String> {
+        app_catalog::app_search_result_from_app_path(path)
     }
 }
 
