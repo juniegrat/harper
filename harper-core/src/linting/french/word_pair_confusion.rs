@@ -70,6 +70,18 @@ const RULES: &[PairRule] = &[
         right: "ça",
         message: "Après un pronom sujet, c'est le démonstratif « ça », pas le possessif « sa ».",
     },
+    PairRule {
+        context: &["il", "elle", "on", "ils", "elles"],
+        wrong: "ce",
+        right: "se",
+        message: "Après un pronom sujet, c'est le pronom réfléchi « se », pas le déterminant « ce ».",
+    },
+    PairRule {
+        context: &["ils", "elles"],
+        wrong: "on",
+        right: "ont",
+        message: "Après « ils/elles », c'est le verbe « avoir » : « ont ».",
+    },
 ];
 
 /// Detects high-precision French homophone confusions (`a`/`à`, `et`/`est`,

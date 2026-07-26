@@ -6,6 +6,9 @@
 //! elisions such as `l'`, `j'`, `qu'`, `jusqu'`...).
 
 mod aux_er_confusion;
+mod det_noun_agreement;
+mod elision_missing;
+mod etre_er_confusion;
 mod french_spacing;
 mod la_confusion;
 mod word_pair_confusion;
@@ -13,6 +16,9 @@ mod word_pair_confusion;
 use std::sync::{Arc, LazyLock};
 
 pub use aux_er_confusion::AuxErConfusion;
+pub use det_noun_agreement::DetNounAgreement;
+pub use elision_missing::ElisionMissing;
+pub use etre_er_confusion::EtreErConfusion;
 pub use french_spacing::FrenchSpacing;
 pub use la_confusion::LaConfusion;
 pub use word_pair_confusion::WordPairConfusion;
@@ -36,8 +42,10 @@ static FRENCH_DICT: LazyLock<Arc<MutableDictionary>> = LazyLock::new(|| {
 
 /// The curated French dictionary, embedded in the binary.
 ///
-/// Currently a ~50k frequency-based word list. It will eventually become a
-/// curated, morphologically annotated dictionary like the English one.
+/// A ~140k-word list combining the Lexique383 vocabulary (frequency-calibrated)
+/// and a 50k frequency list. Morphological data (gender/number of nouns, from
+/// the LeFFF lexicon) lives in `french_noun_gender.tsv` and is used directly
+/// by the agreement linter.
 pub fn curated_french_dictionary() -> Arc<MutableDictionary> {
     FRENCH_DICT.clone()
 }
@@ -47,21 +55,27 @@ pub fn curated_french_dictionary() -> Arc<MutableDictionary> {
 pub fn french_lint_group(dictionary: Arc<MutableDictionary>) -> LintGroup {
     let mut group = LintGroup::empty();
 
-    group.add("SpellCheck", SpellCheck::new(dictionary, Dialect::American));
+    group.add("SpellCheck", SpellCheck::new(dictionary.clone(), Dialect::American));
     group.add("RepeatedWords", RepeatedWords::new());
     group.add("AuxErConfusion", AuxErConfusion::new());
+    group.add("EtreErConfusion", EtreErConfusion::new());
     group.add("LaConfusion", LaConfusion::new());
     group.add("WordPairConfusion", WordPairConfusion::new());
     group.add("FrenchSpacing", FrenchSpacing::new());
+    group.add("DetNounAgreement", DetNounAgreement::new());
+    group.add("ElisionMissing", ElisionMissing::new(dictionary));
 
     // Rules added to an empty group are disabled by default; enable them all.
     for name in [
         "SpellCheck",
         "RepeatedWords",
         "AuxErConfusion",
+        "EtreErConfusion",
         "LaConfusion",
         "WordPairConfusion",
         "FrenchSpacing",
+        "DetNounAgreement",
+        "ElisionMissing",
     ] {
         group.config.set_rule_enabled(name, true);
     }
