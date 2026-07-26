@@ -5,6 +5,7 @@
 //! [`crate::parsers::PlainFrench`], which tokenizes French text (including
 //! elisions such as `l'`, `j'`, `qu'`, `jusqu'`...).
 
+mod adj_agreement;
 mod aux_er_confusion;
 mod det_noun_agreement;
 mod elision_missing;
@@ -15,6 +16,7 @@ mod word_pair_confusion;
 
 use std::sync::{Arc, LazyLock};
 
+pub use adj_agreement::AdjAgreement;
 pub use aux_er_confusion::AuxErConfusion;
 pub use det_noun_agreement::DetNounAgreement;
 pub use elision_missing::ElisionMissing;
@@ -63,6 +65,7 @@ pub fn french_lint_group(dictionary: Arc<MutableDictionary>) -> LintGroup {
     group.add("WordPairConfusion", WordPairConfusion::new());
     group.add("FrenchSpacing", FrenchSpacing::new());
     group.add("DetNounAgreement", DetNounAgreement::new());
+    group.add("AdjAgreement", AdjAgreement::new());
     group.add("ElisionMissing", ElisionMissing::new(dictionary));
 
     // Rules added to an empty group are disabled by default; enable them all.
@@ -75,6 +78,7 @@ pub fn french_lint_group(dictionary: Arc<MutableDictionary>) -> LintGroup {
         "WordPairConfusion",
         "FrenchSpacing",
         "DetNounAgreement",
+        "AdjAgreement",
         "ElisionMissing",
     ] {
         group.config.set_rule_enabled(name, true);
