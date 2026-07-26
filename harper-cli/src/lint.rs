@@ -12,8 +12,11 @@ use serde::Serialize;
 
 use harper_core::{
     Dialect, DictWordMetadata, Document, Token, TokenKind,
-    linting::{FlatConfig, Lint, LintGroup, LintKind},
-    parsers::MarkdownOptions,
+    linting::{
+        FlatConfig, Lint, LintGroup, LintKind,
+        french::{curated_french_dictionary, french_lint_group},
+    },
+    parsers::{MarkdownOptions, PlainFrench},
     remove_overlaps_map,
     spell::{Dictionary, MergedDictionary, MutableDictionary},
     weirpack::Weirpack,
@@ -94,6 +97,8 @@ pub struct LintOptions {
     pub color: bool,
     pub format: OutputFormat,
     pub quiet: bool,
+    /// Lint the input as French (experimental) instead of English.
+    pub french: bool,
 }
 
 enum ReportStyle {
@@ -409,6 +414,7 @@ fn lint_one_input(
         color: _,
         format: _,
         quiet: _,
+        french,
     } = lint_options;
 
     let mut lint_kinds: HashMap<LintKind, usize> = HashMap::new();
@@ -434,7 +440,13 @@ fn lint_one_input(
             }
         }
 
-        match single_input.load(markdown_options, &merged_dictionary) {
+        let load_result = if *french {
+            single_input.load_with_parser(&PlainFrench, curated_french_dictionary().as_ref())
+        } else {
+            single_input.load(markdown_options, &merged_dictionary)
+        };
+
+        match load_result {
             Err(err) => {
                 eprintln!("{}", err);
                 if matches!(report_mode, ReportStyle::Json) {
@@ -447,13 +459,20 @@ fn lint_one_input(
                 }
             }
             Ok((doc, source)) => {
-                // Create the Lint Group from which we will lint this input, using the combined dictionary and the specified dialect
-                let mut lint_group = LintGroup::new_curated(merged_dictionary.into(), *dialect);
+                // Create the Lint Group from which we will lint this input.
+                let mut lint_group = if *french {
+                    french_lint_group(curated_french_dictionary())
+                } else {
+                    // Use the combined dictionary and the specified dialect for English.
+                    let mut group = LintGroup::new_curated(merged_dictionary.into(), *dialect);
 
-                for pack in weirpacks {
-                    let pack_group = pack.to_lint_group()?;
-                    lint_group.merge_from(pack_group);
-                }
+                    for pack in weirpacks {
+                        let pack_group = pack.to_lint_group()?;
+                        group.merge_from(pack_group);
+                    }
+
+                    group
+                };
 
                 // Turn specified rules on or off
                 configure_lint_group(&mut lint_group, only, ignore);

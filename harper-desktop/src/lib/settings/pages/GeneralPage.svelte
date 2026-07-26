@@ -20,6 +20,10 @@ let dialect = 'american';
 let isDialectLoading = true;
 let isDialectSaving = false;
 let dialectError = '';
+let french = false;
+let isFrenchLoading = true;
+let isFrenchSaving = false;
+let frenchError = '';
 let isLaunchAtStartupLoading = true;
 let isLaunchAtStartupSaving = false;
 let launchAtStartupError = '';
@@ -38,6 +42,7 @@ let debounceError = '';
 
 onMount(() => {
 	void loadDialect();
+	void loadFrench();
 	void loadLaunchAtStartup();
 	void loadAutoUpdate();
 	void loadUpdateVersions();
@@ -46,6 +51,10 @@ onMount(() => {
 	const refreshSettings = () => {
 		if (!isDialectSaving) {
 			void loadDialect();
+		}
+
+		if (!isFrenchSaving) {
+			void loadFrench();
 		}
 
 		if (!isLaunchAtStartupSaving) {
@@ -99,6 +108,53 @@ async function setDialect(value: string) {
 		dialectError = `Unable to save dialect: ${error}`;
 	} finally {
 		isDialectSaving = false;
+	}
+}
+
+async function loadFrench() {
+	isFrenchLoading = true;
+	frenchError = '';
+
+	try {
+		french = await Client.getFrench();
+	} catch (error) {
+		frenchError = `Unable to load French setting: ${error}`;
+	} finally {
+		isFrenchLoading = false;
+	}
+}
+
+async function setFrench(value: boolean) {
+	const previousFrench = french;
+
+	french = value;
+	isFrenchSaving = true;
+	frenchError = '';
+
+	try {
+		await Client.setFrench(value);
+	} catch (error) {
+		french = previousFrench;
+		frenchError = `Unable to save French setting: ${error}`;
+	} finally {
+		isFrenchSaving = false;
+	}
+}
+
+async function setLanguage(value: string) {
+	// French replaces the whole English pipeline (parser, dictionary, rules),
+	// so it is a language choice, not an add-on over the dialect.
+	if (value === 'french') {
+		await setFrench(true);
+		return;
+	}
+
+	if (french) {
+		await setFrench(false);
+	}
+
+	if (value !== dialect) {
+		await setDialect(value);
 	}
 }
 
@@ -364,28 +420,30 @@ function settingsValueToDialect(value: string): Dialect {
         <div class="stanza">
           <div class="eyebrow">Language</div>
           <p class="section-copy">
-            Choose the dialect Harper uses to check spelling and grammar.
+            Choose the language Harper uses to check spelling and grammar. Selecting Français
+            replaces the English pipeline (parser, dictionary and rules) entirely.
           </p>
           <div class="inline-row">
-            <label for="dialect">English dialect:</label>
+            <label for="language">Language:</label>
             <select
-              id="dialect"
+              id="language"
               class="select wide"
-              disabled={isDialectLoading || isDialectSaving}
-              bind:value={dialect}
-              on:change={(event) => setDialect(event.currentTarget.value)}
+              disabled={isDialectLoading || isDialectSaving || isFrenchLoading || isFrenchSaving}
+              value={french ? 'french' : dialect}
+              on:change={(event) => setLanguage(event.currentTarget.value)}
             >
               {#each DIALECT_OPTIONS as option}
                 <option value={option.value}>{option.label}</option>
               {/each}
+              <option value="french">Français (expérimental)</option>
             </select>
           </div>
-          {#if isDialectLoading}
-            <p class="result-summary">Loading dialect...</p>
-          {:else if dialectError}
-            <p class="result-summary">{dialectError}</p>
-          {:else if isDialectSaving}
-            <p class="result-summary">Saving dialect...</p>
+          {#if isDialectLoading || isFrenchLoading}
+            <p class="result-summary">Loading language...</p>
+          {:else if dialectError || frenchError}
+            <p class="result-summary">{dialectError || frenchError}</p>
+          {:else if isDialectSaving || isFrenchSaving}
+            <p class="result-summary">Saving language...</p>
           {/if}
         </div>
 

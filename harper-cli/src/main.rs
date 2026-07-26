@@ -92,6 +92,9 @@ enum Args {
         /// Suppress informational status messages and only output actual lint errors.
         #[arg(long)]
         quiet: bool,
+        /// Lint the input as French (experimental) instead of English.
+        #[arg(long)]
+        french: bool,
     },
     /// Parse a provided document and print the detected symbols.
     Parse {
@@ -258,6 +261,7 @@ fn main() -> anyhow::Result<()> {
             weirpacks,
             format,
             quiet,
+            french,
         } => {
             let dialect = parse_dialect(&dialect_str)
                 .map_err(|e| anyhow!("Invalid dialect '{}': {}", dialect_str, e))?;
@@ -276,6 +280,7 @@ fn main() -> anyhow::Result<()> {
                     color,
                     format,
                     quiet,
+                    french,
                 },
                 user_dict_path,
                 // TODO workspace_dict_path?

@@ -83,6 +83,71 @@ pub fn lex_english_token(source: &[char]) -> FoundToken {
     .unwrap_or_else(lex_catch)
 }
 
+pub fn lex_french_token(source: &[char]) -> FoundToken {
+    [
+        lex_regexish,
+        lex_punctuation,
+        lex_tabs,
+        lex_spaces,
+        lex_newlines,
+        lex_plural_digit, // Before lex_number, which would match the initial digit
+        lex_hex_number,   // Before lex_number, which would match the initial 0
+        lex_long_decade,  // Before lex_number, which would match the digits up to the -s
+        lex_number,
+        lex_url,
+        lex_email_address,
+        lex_hostname_token,
+        lex_french_elision, // Before lex_word, which would swallow the apostrophe
+        lex_word,
+    ]
+    .into_iter()
+    .find_map(|lexer| lexer(source))
+    .unwrap_or_else(lex_catch)
+}
+
+/// Lex a French elided clitic such as `l'`, `j'`, `qu'` or `jusqu'`.
+///
+/// The apostrophe (straight or curly) is included in the token, and the
+/// following word is lexed separately. Longest prefixes are tried first so
+/// that `jusqu'` is not split as `qu'`.
+fn lex_french_elision(source: &[char]) -> Option<FoundToken> {
+    const PREFIXES: &[&str] = &[
+        "jusqu", "lorsqu", "puisqu", "quoiqu", "presqu", "grand", "entr", "qu", "l", "j", "n", "s",
+        "t", "m", "c", "d",
+    ];
+
+    let is_apostrophe = |c: char| matches!(c, '\'' | '\u{2019}' | '\u{02BC}');
+
+    for prefix in PREFIXES {
+        let plen = prefix.chars().count();
+        if source.len() < plen + 2 {
+            continue;
+        }
+
+        let matches_prefix = source[..plen]
+            .iter()
+            .copied()
+            .zip(prefix.chars())
+            .all(|(a, b)| a.to_ascii_lowercase() == b);
+
+        if !matches_prefix || !is_apostrophe(source[plen]) {
+            continue;
+        }
+
+        // The elision must attach to a following word character.
+        if !source[plen + 1].is_english_lingual() {
+            continue;
+        }
+
+        return Some(FoundToken {
+            next_index: plen + 1,
+            token: TokenKind::Word(None),
+        });
+    }
+
+    None
+}
+
 fn lex_word(source: &[char]) -> Option<FoundToken> {
     let is_apostrophe = |c: char| lex_punctuation(&[c]).is_some_and(|t| t.token.is_apostrophe());
 

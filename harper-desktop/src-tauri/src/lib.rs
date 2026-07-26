@@ -10,7 +10,8 @@ use crate::debounce::{DebounceState, DebounceStatus};
 use clap::{Parser, Subcommand};
 use harper_core::{
     Dialect, DictWordMetadata, Document, IgnoredLints,
-    linting::{Lint, LintGroup},
+    linting::{Lint, LintGroup, french::curated_french_dictionary},
+    parsers::PlainFrench,
     spell::MutableDictionary,
 };
 use serde::Serialize;
@@ -166,6 +167,27 @@ pub fn run_tauri() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
         .invoke_handler(commands::application_message_handler())
+        .on_menu_event(|app, event| {
+            match event.id().0.as_str() {
+                "open-settings" => {
+                    let _ = windows::show_settings_window(app).inspect_err(|err| {
+                        error!("Could not open the settings window from the app menu: {err}")
+                    });
+                }
+                "open-editor" => {
+                    let _ = windows::show_editor_window(app).inspect_err(|err| {
+                        error!("Could not open the editor window from the app menu: {err}")
+                    });
+                }
+                "toggle-service" => {
+                    let service: tauri::State<HighlighterService> = app.state();
+                    let _ = service.toggle().inspect_err(|err| {
+                        error!("Could not toggle highlighter from the app menu: {err}")
+                    });
+                }
+                _ => {}
+            }
+        })
         .setup(move |app| {
             app.handle()
                 .plugin(tauri_plugin_updater::Builder::new().build())?;
@@ -173,14 +195,54 @@ pub fn run_tauri() {
             set_up_tray_menu(app.handle())?;
             warm_app_search_cache(app.handle().clone());
 
+            // Add native Harper actions to the application menu so everything
+            // is reachable even when the tray icon is hidden (notch/crowding).
+            let menu = tauri::menu::Menu::default(app.handle())?;
+            if let Some(tauri::menu::MenuItemKind::Submenu(app_submenu)) =
+                menu.items()?.into_iter().next()
+            {
+                let settings_item = tauri::menu::MenuItemBuilder::with_id(
+                    "open-settings",
+                    "Settings…",
+                )
+                .accelerator("CmdOrCtrl+,")
+                .build(app.handle())?;
+                let editor_item =
+                    tauri::menu::MenuItemBuilder::with_id("open-editor", "Open Editor")
+                        .accelerator("CmdOrCtrl+N")
+                        .build(app.handle())?;
+                let toggle_item = tauri::menu::MenuItemBuilder::with_id(
+                    "toggle-service",
+                    "Toggle Service",
+                )
+                .build(app.handle())?;
+                app_submenu.append(&settings_item)?;
+                app_submenu.append(&editor_item)?;
+                app_submenu.append(&toggle_item)?;
+                app.set_menu(menu)?;
+            }
+
             if is_first_launch {
                 windows::show_settings_window(app.handle())?;
             }
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // Clicking the dock icon (or relaunching) with no visible windows
+            // should reopen the main editor window, like a normal macOS app.
+            if let tauri::RunEvent::Reopen {
+                has_visible_windows: false,
+                ..
+            } = event
+            {
+                let _ = windows::show_editor_window(app_handle).inspect_err(|err| {
+                    error!("Could not open the editor window on reopen: {err}")
+                });
+            }
+        });
 }
 
 /// Run as a highlighter process.
@@ -212,6 +274,7 @@ pub fn run_highlighter(has_parent: bool) {
     let ignored_lints = Rc::new(RefCell::new(startup_config.ignored_lints));
     let user_dictionary = Rc::new(RefCell::new(startup_config.mutable_dictionary));
     let dialect = Rc::new(RefCell::new(startup_config.dialect));
+    let french = Rc::new(RefCell::new(startup_config.french));
     let integrations = Arc::new(StdMutex::new(startup_config.integrations));
     let debounce_ms = Rc::new(RefCell::new(startup_config.debounce_ms));
     let linter = Rc::new(RefCell::new(startup_linter));
@@ -219,6 +282,7 @@ pub fn run_highlighter(has_parent: bool) {
     let lint_ignored_lints = ignored_lints.clone();
     let lint_linter = linter.clone();
     let lint_user_dictionary = user_dictionary.clone();
+    let lint_french = french.clone();
     let lint_debounce_ms = debounce_ms.clone();
     let lint_debounce_state = Rc::new(RefCell::new(DebounceState::default()));
 
@@ -231,6 +295,7 @@ pub fn run_highlighter(has_parent: bool) {
     let dictionary_user_dictionary = user_dictionary.clone();
     let dictionary_linter = linter.clone();
     let dictionary_dialect = dialect.clone();
+    let dictionary_french = french.clone();
     let dictionary_debounce_ms = debounce_ms.clone();
 
     let disable_client = client.clone();
@@ -242,6 +307,7 @@ pub fn run_highlighter(has_parent: bool) {
     let refresh_ignored_lints = ignored_lints.clone();
     let refresh_user_dictionary = user_dictionary.clone();
     let refresh_dialect = dialect.clone();
+    let refresh_french = french.clone();
     let refresh_integrations = integrations.clone();
     let refresh_debounce_ms = debounce_ms.clone();
     let refresh_linter = linter.clone();
@@ -255,9 +321,13 @@ pub fn run_highlighter(has_parent: bool) {
             DebounceStatus::Ready => {}
         }
 
-        let dictionary =
-            Config::dictionary_from_user_dictionary(lint_user_dictionary.borrow().clone());
-        let doc = Document::new_markdown_default(text, &dictionary);
+        let doc = if *lint_french.borrow() {
+            Document::new(text, &PlainFrench, curated_french_dictionary().as_ref())
+        } else {
+            let dictionary =
+                Config::dictionary_from_user_dictionary(lint_user_dictionary.borrow().clone());
+            Document::new_markdown_default(text, &dictionary)
+        };
         let mut organized_lints = lint_linter.borrow_mut().organized_lints(&doc);
 
         for lints in organized_lints.values_mut() {
@@ -300,6 +370,7 @@ pub fn run_highlighter(has_parent: bool) {
             auto_update: true,
             last_update_check: None,
             highlighter_service_enabled: true,
+            french: *dictionary_french.borrow(),
         };
         *dictionary_linter.borrow_mut() = config.create_linter();
 
@@ -328,6 +399,7 @@ pub fn run_highlighter(has_parent: bool) {
                 &refresh_ignored_lints,
                 &refresh_user_dictionary,
                 &refresh_dialect,
+                &refresh_french,
                 &refresh_integrations,
                 &refresh_debounce_ms,
                 &refresh_linter,
@@ -365,6 +437,7 @@ fn fetch_highlighter_config(
 ) -> Result<Config, ProtocolError> {
     runtime.block_on(async {
         let dialect = client.get_dialect().await?;
+        let french = client.get_french().await?;
         let mutable_dictionary = client.get_dictionary().await?;
         let ignored_lints = client.get_ignored_lints().await?;
         let lint_config = client.get_lint_config().await?;
@@ -381,6 +454,7 @@ fn fetch_highlighter_config(
             auto_update: true,
             last_update_check: None,
             highlighter_service_enabled: true,
+            french,
         })
     })
 }
@@ -390,6 +464,7 @@ fn apply_highlighter_config(
     ignored_lints: &Rc<RefCell<IgnoredLints>>,
     user_dictionary: &Rc<RefCell<MutableDictionary>>,
     dialect: &Rc<RefCell<Dialect>>,
+    french: &Rc<RefCell<bool>>,
     integrations: &Arc<StdMutex<Vec<Integration>>>,
     debounce_ms: &Rc<RefCell<u64>>,
     linter: &Rc<RefCell<LintGroup>>,
@@ -398,6 +473,7 @@ fn apply_highlighter_config(
     *ignored_lints.borrow_mut() = config.ignored_lints;
     *user_dictionary.borrow_mut() = config.mutable_dictionary;
     *dialect.borrow_mut() = config.dialect;
+    *french.borrow_mut() = config.french;
     match integrations.lock() {
         Ok(mut integrations) => *integrations = config.integrations,
         Err(error) => eprintln!("failed to update integrations: {error}"),

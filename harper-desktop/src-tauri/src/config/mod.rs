@@ -4,7 +4,10 @@ mod integration;
 pub use error::Error;
 use harper_core::{
     Dialect, IgnoredLints,
-    linting::{FlatConfig, LintGroup},
+    linting::{
+        FlatConfig, LintGroup,
+        french::{curated_french_dictionary, french_lint_group},
+    },
     spell::{FstDictionary, MergedDictionary, MutableDictionary},
 };
 use harper_dictionary_wordlist::{load_dict, save_dict};
@@ -23,6 +26,8 @@ pub struct Config {
     pub auto_update: bool,
     pub last_update_check: Option<u64>,
     pub highlighter_service_enabled: bool,
+    /// Lint text as French (experimental) instead of English.
+    pub french: bool,
 }
 
 impl Config {
@@ -37,6 +42,7 @@ impl Config {
             auto_update: true,
             last_update_check: None,
             highlighter_service_enabled: true,
+            french: false,
         }
     }
 
@@ -135,8 +141,15 @@ impl Config {
     }
 
     pub fn create_linter(&self) -> LintGroup {
-        LintGroup::new_curated(self.create_dictionary(), self.dialect)
-            .with_lint_config(self.lint_config.clone())
+        if self.french {
+            let mut group = french_lint_group(curated_french_dictionary());
+            // Let the user's explicit rule settings override the French defaults.
+            group.config.merge_from(self.lint_config.clone());
+            group
+        } else {
+            LintGroup::new_curated(self.create_dictionary(), self.dialect)
+                .with_lint_config(self.lint_config.clone())
+        }
     }
 
     #[allow(dead_code)]
@@ -165,6 +178,7 @@ impl Config {
             "auto_update": self.auto_update,
             "last_update_check": self.last_update_check,
             "highlighter_service_enabled": self.highlighter_service_enabled,
+            "french": self.french,
         }))
     }
 
@@ -194,6 +208,7 @@ impl Config {
                 "highlighter_service_enabled",
             )?
             .unwrap_or(true),
+            french: deserialize_optional_field(object, "french")?.unwrap_or(false),
         })
     }
 }

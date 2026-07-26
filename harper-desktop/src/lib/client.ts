@@ -76,6 +76,14 @@ export class Client {
 		await invoke('set_dialect', { dialect: dialectToRustDialect(dialect) });
 	}
 
+	static async getFrench(): Promise<boolean> {
+		return await invoke<boolean>('get_french');
+	}
+
+	static async setFrench(french: boolean): Promise<void> {
+		await invoke('set_french', { french });
+	}
+
 	static async getDebounceMs(): Promise<number> {
 		return await invoke<number>('get_debounce_ms');
 	}

@@ -20,6 +20,8 @@ pub fn application_message_handler<R: Runtime>() -> impl Fn(Invoke<R>) -> bool {
     tauri::generate_handler![
         get_lint_config,
         get_dialect,
+        get_french,
+        set_french,
         get_debounce_ms,
         set_debounce_ms,
         get_auto_update,
@@ -57,6 +59,23 @@ async fn get_lint_config(config: State<'_, Arc<Mutex<Config>>>) -> Result<FlatCo
 #[tauri::command]
 async fn get_dialect(config: State<'_, Arc<Mutex<Config>>>) -> Result<Dialect, String> {
     Ok(config.lock().await.dialect)
+}
+
+#[tauri::command]
+async fn get_french(config: State<'_, Arc<Mutex<Config>>>) -> Result<bool, String> {
+    Ok(config.lock().await.french)
+}
+
+#[tauri::command]
+async fn set_french(french: bool, config: State<'_, Arc<Mutex<Config>>>) -> Result<(), String> {
+    let mut config = config.lock().await;
+    config.french = french;
+    config
+        .save_to_system()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
 }
 
 #[tauri::command]

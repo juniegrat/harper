@@ -59,6 +59,9 @@ where
             Request::GetDialect => Response::GetDialect {
                 dialect: self.config.lock().await.dialect,
             },
+            Request::GetFrench => Response::GetFrench {
+                french: self.config.lock().await.french,
+            },
             Request::GetDebounceMs => Response::GetDebounceMs {
                 debounce_ms: self.config.lock().await.debounce_ms,
             },

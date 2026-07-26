@@ -66,6 +66,15 @@ where
         }
     }
 
+    pub async fn get_french(&mut self) -> Result<bool, ProtocolError> {
+        match self.send_request(Request::GetFrench).await? {
+            Response::GetFrench { french } => Ok(french),
+            _ => Err(ProtocolError::UnexpectedResponse {
+                expected: "GetFrench",
+            }),
+        }
+    }
+
     pub async fn get_debounce_ms(&mut self) -> Result<u64, ProtocolError> {
         match self.send_request(Request::GetDebounceMs).await? {
             Response::GetDebounceMs { debounce_ms } => Ok(debounce_ms),
