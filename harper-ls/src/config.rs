@@ -75,6 +75,8 @@ pub struct Config {
     pub isolate_english: bool,
     pub markdown_options: MarkdownOptions,
     pub dialect: Dialect,
+    /// Lint documents as French (experimental) instead of English.
+    pub french: bool,
     /// Maximum length (in bytes) a file can have before it's skipped.
     /// Above this limit, the file will not be linted.
     pub max_file_length: usize,
@@ -165,6 +167,14 @@ impl Config {
             base.dialect = serde_json::from_value(v.clone())?;
         }
 
+        if let Some(v) = value.get("french") {
+            if let Value::Bool(v) = v {
+                base.french = *v;
+            } else {
+                bail!("french must be a boolean.");
+            }
+        }
+
         if let Some(v) = value.get("codeActions") {
             base.code_action_config = CodeActionConfig::from_lsp_config(v.clone())?;
         }
@@ -224,6 +234,7 @@ impl Default for Config {
             isolate_english: false,
             markdown_options: MarkdownOptions::default(),
             dialect: Dialect::American,
+            french: false,
             max_file_length: 120_000,
             exclude_patterns: GlobSet::empty(),
         }

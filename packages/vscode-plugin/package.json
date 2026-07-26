@@ -147,6 +147,12 @@
 					"default": false,
 					"description": "Only lint English text in documents that are a mixture of English and another language."
 				},
+				"harper.french": {
+					"scope": "resource",
+					"type": "boolean",
+					"default": false,
+					"description": "Lint documents as French (experimental) instead of English."
+				},
 				"harper.markdown.IgnoreLinkTitle": {
 					"scope": "resource",
 					"type": "boolean",

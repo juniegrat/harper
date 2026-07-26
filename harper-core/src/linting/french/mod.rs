@@ -28,7 +28,7 @@ pub use word_pair_confusion::WordPairConfusion;
 use super::LintGroup;
 use super::repeated_words::RepeatedWords;
 use super::spell_check::SpellCheck;
-use crate::spell::MutableDictionary;
+use crate::spell::{Dictionary, MutableDictionary};
 use crate::{Dialect, DictWordMetadata};
 
 static FRENCH_DICT: LazyLock<Arc<MutableDictionary>> = LazyLock::new(|| {
@@ -54,7 +54,13 @@ pub fn curated_french_dictionary() -> Arc<MutableDictionary> {
 
 /// A [`LintGroup`] containing every French linter: spellchecking plus the
 /// French-specific grammar and typography rules.
-pub fn french_lint_group(dictionary: Arc<MutableDictionary>) -> LintGroup {
+///
+/// Generic over the dictionary so callers can pass the curated French
+/// dictionary directly or a merged dictionary (e.g. with user-added words).
+pub fn french_lint_group<T>(dictionary: T) -> LintGroup
+where
+    T: Dictionary + Clone + 'static,
+{
     let mut group = LintGroup::empty();
 
     group.add("SpellCheck", SpellCheck::new(dictionary.clone(), Dialect::American));

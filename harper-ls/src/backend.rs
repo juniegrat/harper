@@ -12,9 +12,10 @@ use anyhow::{Context, Result, anyhow};
 use futures::future::join;
 use harper_asciidoc::AsciidocParser;
 use harper_comments::CommentParser;
+use harper_core::linting::french::{curated_french_dictionary, french_lint_group};
 use harper_core::linting::{FlatConfig, LintGroup};
 use harper_core::parsers::{
-    CollapseIdentifiers, IsolateEnglish, Markdown, OrgMode, Parser, PlainEnglish,
+    CollapseIdentifiers, IsolateEnglish, Markdown, OrgMode, Parser, PlainEnglish, PlainFrench,
 };
 use harper_core::spell::{Dictionary, FstDictionary, MergedDictionary, MutableDictionary};
 use harper_core::{Dialect, DictWordMetadata, Document, IgnoredLints};
@@ -48,6 +49,27 @@ use tracing::{error, info, warn};
 /// Return harper-ls version
 pub fn ls_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
+}
+
+/// Build the linter for a document: the French pipeline (experimental) or the
+/// curated English one, honouring the user's lint configuration.
+fn build_linter(
+    dict: &Arc<MergedDictionary>,
+    lint_config: &FlatConfig,
+    dialect: Dialect,
+    french: bool,
+) -> LintGroup {
+    if french {
+        let mut group = french_lint_group(dict.clone());
+        // `with_lint_config` would replace the group's config wholesale,
+        // disabling the French rules (their names are absent from the user
+        // config). Merge instead: French defaults on, user overrides win.
+        let mut config = group.config.clone();
+        config.merge_from(lint_config.clone());
+        group.with_lint_config(config)
+    } else {
+        LintGroup::new_curated(dict.clone(), dialect).with_lint_config(lint_config.clone())
+    }
 }
 
 pub struct Backend {
@@ -202,7 +224,11 @@ impl Backend {
 
     async fn generate_global_dictionary(&self) -> Result<MergedDictionary> {
         let mut dict = MergedDictionary::new();
-        dict.add_dictionary(FstDictionary::curated());
+        if self.config.read().await.french {
+            dict.add_dictionary(curated_french_dictionary());
+        } else {
+            dict.add_dictionary(FstDictionary::curated());
+        }
         let user_dict = self.load_user_dictionary().await;
         dict.add_dictionary(Arc::new(user_dict));
         let ws_dict = self.load_workspace_dictionary().await;
@@ -250,6 +276,7 @@ impl Backend {
             markdown_options,
             isolate_english,
             dialect,
+            french,
             max_file_length,
             exclude_patterns,
         ) = {
@@ -259,6 +286,7 @@ impl Backend {
                 config.markdown_options,
                 config.isolate_english,
                 config.dialect,
+                config.french,
                 config.max_file_length,
                 config.exclude_patterns.clone(),
             )
@@ -289,8 +317,7 @@ impl Backend {
 
             DocumentState {
                 ignored_lints,
-                linter: LintGroup::new_curated(dict.clone(), dialect)
-                    .with_lint_config(lint_config.clone()),
+                linter: build_linter(&dict, &lint_config, dialect, french),
                 language_id: language_id.map(|v| v.to_string()),
                 dict: dict.clone(),
                 uri: uri.clone(),
@@ -301,8 +328,7 @@ impl Backend {
         if doc_state.dict != dict {
             doc_state.dict = dict.clone();
             info!("Constructing new linter because of modified dictionary.");
-            doc_state.linter =
-                LintGroup::new_curated(dict.clone(), dialect).with_lint_config(lint_config.clone());
+            doc_state.linter = build_linter(&dict, &lint_config, dialect, french);
         }
 
         let Some(language_id) = &doc_state.language_id else {
@@ -318,6 +344,7 @@ impl Backend {
             doc_state: &'a mut DocumentState,
             lint_config: &FlatConfig,
             dialect: Dialect,
+            french: bool,
         ) -> Result<Box<dyn Parser>> {
             if doc_state.ident_dict != new_dict {
                 info!("Constructing new linter because of modified ident dictionary.");
@@ -327,8 +354,7 @@ impl Backend {
                 merged.add_dictionary(new_dict);
                 let merged = Arc::new(merged);
 
-                doc_state.linter = LintGroup::new_curated(merged.clone(), dialect)
-                    .with_lint_config(lint_config.clone());
+                doc_state.linter = build_linter(&merged, lint_config, dialect, french);
                 doc_state.dict = merged.clone();
             }
 
@@ -341,6 +367,8 @@ impl Backend {
         let source: Vec<char> = text.chars().collect();
         let ts_parser = CommentParser::new_from_language_id(language_id, markdown_options);
         let parser: Option<Box<dyn Parser>> = match language_id.as_str() {
+            // In French mode every document is linted as plain French text.
+            _ if french => Some(Box::new(PlainFrench)),
             _ if ts_parser.is_some() => {
                 let ts_parser = ts_parser.unwrap();
 
@@ -354,6 +382,7 @@ impl Backend {
                             doc_state,
                             &lint_config,
                             dialect,
+                            french,
                         )
                         .await?,
                     )
@@ -385,6 +414,7 @@ impl Backend {
                             doc_state,
                             &lint_config,
                             dialect,
+                            french,
                         )
                         .await?,
                     )
@@ -407,7 +437,7 @@ impl Backend {
                 doc_lock.remove(uri);
             }
             Some(mut parser) => {
-                if isolate_english {
+                if isolate_english && !french {
                     parser = Box::new(IsolateEnglish::new(parser, doc_state.dict.clone()));
                 }
 
@@ -816,8 +846,12 @@ impl LanguageServer for Backend {
 
             for doc in doc_lock.values_mut() {
                 info!("Constructing new LintGroup for updated configuration.");
-                doc.linter = LintGroup::new_curated(doc.dict.clone(), config_lock.dialect)
-                    .with_lint_config(config_lock.lint_config.clone());
+                doc.linter = build_linter(
+                    &doc.dict,
+                    &config_lock.lint_config,
+                    config_lock.dialect,
+                    config_lock.french,
+                );
             }
 
             doc_lock.keys().cloned().collect()

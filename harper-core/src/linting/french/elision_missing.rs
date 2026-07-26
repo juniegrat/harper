@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use super::super::{Lint, LintKind, Linter, Suggestion};
-use crate::spell::{Dictionary, MutableDictionary};
+use crate::spell::Dictionary;
 use crate::{Document, TokenStringExt};
 
 /// Elidable prefixes, longest first. « jusqu », « lorsqu », « puisqu » and
@@ -23,12 +21,12 @@ fn is_vowel(c: char) -> bool {
 /// dictionary but can be split into an elidable prefix plus a known
 /// vowel-initial word: « jai » → « j'ai », « cest » → « c'est »,
 /// « lhomme » → « l'homme ».
-pub struct ElisionMissing {
-    dictionary: Arc<MutableDictionary>,
+pub struct ElisionMissing<T: Dictionary> {
+    dictionary: T,
 }
 
-impl ElisionMissing {
-    pub fn new(dictionary: Arc<MutableDictionary>) -> Self {
+impl<T: Dictionary> ElisionMissing<T> {
+    pub fn new(dictionary: T) -> Self {
         Self { dictionary }
     }
 
@@ -38,7 +36,7 @@ impl ElisionMissing {
     }
 }
 
-impl Linter for ElisionMissing {
+impl<T: Dictionary> Linter for ElisionMissing<T> {
     fn lint(&mut self, document: &Document) -> Vec<Lint> {
         let mut lints = Vec::new();
 
@@ -102,7 +100,7 @@ mod tests {
     use crate::linting::french::test_helpers::{assert_fr_lint_count, assert_fr_suggestion_result};
     use crate::linting::french::curated_french_dictionary;
 
-    fn linter() -> ElisionMissing {
+    fn linter() -> ElisionMissing<std::sync::Arc<crate::spell::MutableDictionary>> {
         ElisionMissing::new(curated_french_dictionary())
     }
 
